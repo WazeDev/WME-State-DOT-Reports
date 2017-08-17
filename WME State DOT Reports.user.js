@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.1.3
+// @version      1.1.4
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
-// @include      https://editor-beta.waze.com/*editor/*
-// @include      https://www.waze.com/*editor/*
-// @exclude      https://www.waze.com/*user/editor/*
+// @license      GNU GPLv3
+// @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
 // @grant        GM_xmlhttpRequest
 // @connect      511.ky.gov
 // @connect      indot.carsprogram.org
