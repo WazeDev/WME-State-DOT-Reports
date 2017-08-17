@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports (beta)
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.2.0.b4
+// @version      1.2.0.b5
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -69,6 +69,7 @@
     }
 
     function copyToClipboard(report) {
+        debugger;
         // create hidden text element, if it doesn't already exist
         var targetId = "_hiddenCopyText_";
         //var isInput = elem.tagName === "INPUT" || elem.tagName === "TEXTAREA";
@@ -422,16 +423,18 @@
         var $th = $('<thead>').appendTo($table);
         $th.append(
             $('<tr>').append(
-                $('<th>',{id:'dot-table-star-header',title:'Favorites'})).append(
+                $('<th>',{id:'dot-table-star-header',title:'Favorites'}),
                 $('<th>', {id:'dot-table-archive-header',class:'centered'}).append(
-                    $('<span>', {class:'fa fa-archive',style:'font-size:120%',title:'Sort by archived'}))).append(
-                $('<th>', {id:'dot-table-category-header',title:'Sort by report type'})).append(
+                    $('<span>', {class:'fa fa-archive',style:'font-size:120%',title:'Sort by archived'})
+                ),
+                $('<th>', {id:'dot-table-category-header',title:'Sort by report type'}),
                 $('<th>', {id:'dot-table-priority-header',title:'Sort by priority'}).append(
-                    $('<span>', {class:'fa fa-exclamation-circle',style:'font-size:120%'}))).append(
-                $('<th>',{id:'dot-table-desc-header',title:'Sort by description'}).text('Description')).append(
-                $('<th>',{id:'dot-table-begins-header',title:'Sort by starting date'}).text('Starts')).append(
-
-            ));
+                    $('<span>', {class:'fa fa-exclamation-circle',style:'font-size:120%'})
+                ),
+                $('<th>',{id:'dot-table-desc-header',title:'Sort by description'}).text('Description'),
+                $('<th>',{id:'dot-table-begins-header',title:'Sort by starting date'}).text('Starts')
+            )
+        );
         _reports.sort(dynamicSortMultiple(_columnSortOrder));
         _reports.forEach(function(report) {
             addRow($table, report);
