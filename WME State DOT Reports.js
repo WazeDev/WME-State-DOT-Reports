@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports (beta)
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.2.0.b5
+// @version      1.2.1
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -46,14 +46,12 @@
     var _mapLayer = null;
     var _settings = {};
     var _dotInfo = {
-        IA: { mapType: 'cars', baseUrl: 'http://hb.511ia.org', reportUrl: '/#allReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        ID: { mapType: 'cars', baseUrl: 'http://hb.511.idaho.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        IN: { mapType: 'cars', baseUrl: 'http://indot.carsprogram.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        KY: { mapType: 'cars', baseUrl: 'http://511.ky.gov/kyhb', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        LA: { mapType: 'cars', baseUrl: 'http://hb.511la.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        MN: { mapType: 'cars', baseUrl: 'http://hb.511mn.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        NE: { mapType: 'cars', baseUrl: 'http://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        RI: { mapType: 'cars', baseUrl: 'http://511.dot.ri.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' }
+        IA: { mapType: 'cars', baseUrl: 'https://hb.511ia.org', reportUrl: '/#allReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        ID: { mapType: 'cars', baseUrl: 'https://hb.511.idaho.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        IN: { mapType: 'cars', baseUrl: 'https://indot.carsprogram.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        LA: { mapType: 'cars', baseUrl: 'https://hb.511la.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        MN: { mapType: 'cars', baseUrl: 'https://hb.511mn.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        NE: { mapType: 'cars', baseUrl: 'https://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
     };
     var _tabDiv = {};  // stores the user tab div so it can be restored after switching back from Events mode to Default mode
     var _reports = [];
@@ -628,7 +626,7 @@
             uniqueName: "__stateDotReports",
         });
 
-        I18n.translations.en.layers.name.__stateDotReports = "State DOT Reports";
+        I18n.translations[I18n.locale].layers.name.__stateDotReports = "State DOT Reports";
         W.map.addLayer(_mapLayer);
         _mapLayer.setVisibility(_settings.layerVisible);
         _mapLayer.events.register('visibilitychanged',null,onLayerVisibilityChanged);
@@ -682,11 +680,9 @@
                             .append($('<option>', {value:'ID'}).text('Idaho'))
                             .append($('<option>', {value:'IN'}).text('Indiana'))
                             .append($('<option>', {value:'IA'}).text('Iowa'))
-                            .append($('<option>', {value:'KY'}).text('Kentucky'))
                             .append($('<option>', {value:'LA'}).text('Louisiana'))
                             .append($('<option>', {value:'MN'}).text('Minnesota'))
                             .append($('<option>', {value:'NE'}).text('Nebraska'))
-                            .append($('<option>', {value:'RI'}).text('Rhode Island'))
                             .val(_settings.state)
                         )
                     )
@@ -820,7 +816,7 @@
             settings = {
                 lastVersion:null,
                 layerVisible:true,
-                state:'KY',
+                state:'ID',
                 hideArchivedReports:true,
                 archivedReports:{}
             };
@@ -843,36 +839,19 @@
     }
 
     function bootstrap() {
-        var bGreasemonkeyServiceDefined = false;
-        try {
-            if ("object" === typeof Components.interfaces.gmIGreasemonkeyService){
-                bGreasemonkeyServiceDefined = true;
-            }
-        } catch (err) {
-            //Ignore.
-        }
-        if ( "undefined" === typeof unsafeWindow || ! bGreasemonkeyServiceDefined) {
-            unsafeWindow = (function () {
-                var dummyElem   = document.createElement('p');
-                dummyElem.setAttribute ('onclick', 'return window;');
-                return dummyElem.onclick ();
-            }) ();
-        }
-
-        var wz = unsafeWindow.W;
-        if (wz && wz.loginManager &&
-            wz.loginManager.events.register &&
-            wz.map && wz.loginManager.isLoggedIn()) {
-            log('Initializing...', 0);
+        if (W && W.loginManager &&
+            W.loginManager.events.register &&
+            W.map && W.loginManager.isLoggedIn()) {
+            log('Initializing...', 1);
             init();
         } else {
-            log('Bootstrap failed. Trying again...', 0);
-            unsafeWindow.setTimeout(function () {
+            log('Bootstrap failed. Trying again...', 1);
+            setTimeout(function () {
                 bootstrap();
             }, 1000);
         }
     }
 
-    log('Bootstrap...', 0);
+    log('Bootstrap...', 1);
     bootstrap();
 })();
