@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.1.4
+// @version      1.2.1
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -16,6 +16,8 @@
 // @connect      hb.511la.org
 // @connect      hb.511mn.org
 // @connect      511.dot.ri.gov
+// @connect      tims.ncdot.gov
+// @connect      apps.dot.state.nc.us
 // ==/UserScript==
 
 /* global $ */
@@ -36,22 +38,20 @@
     var _debugLevel = 0;
     var _scriptVersion = GM_info.script.version;
     var _scriptVersionChanges = [
-        GM_info.script.name + '\nv' + _scriptVersion + '\n\nWhat\'s New\n------------------------------',
-        '\n\n- Added flooding closure icons for LA.'
+        GM_info.script.name + '\nv' + _scriptVersion + '\n\nWhat\'s New\n------------------------------\n',
+        '\n- Added Copy To Clipboard button on report popups.'
     ].join('');
-
+    var _previousZoom;
     var _imagesPath = 'https://raw.githubusercontent.com/mapomatic/ky511-images/master';
     var _mapLayer = null;
     var _settings = {};
     var _dotInfo = {
-        IA: { mapType: 'CARS', baseUrl: 'http://hb.511ia.org', reportUrl: '/#allReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        ID: { mapType: 'CARS', baseUrl: 'http://hb.511.idaho.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        IN: { mapType: 'CARS', baseUrl: 'http://indot.carsprogram.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        KY: { mapType: 'CARS', baseUrl: 'http://511.ky.gov/kyhb', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        LA: { mapType: 'CARS', baseUrl: 'http://hb.511la.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        MN: { mapType: 'CARS', baseUrl: 'http://hb.511mn.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        NE: { mapType: 'CARS', baseUrl: 'http://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        RI: { mapType: 'CARS', baseUrl: 'http://511.dot.ri.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' }
+        IA: { mapType: 'cars', baseUrl: 'https://hb.511ia.org', reportUrl: '/#allReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        ID: { mapType: 'cars', baseUrl: 'https://hb.511.idaho.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        IN: { mapType: 'cars', baseUrl: 'https://indot.carsprogram.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        LA: { mapType: 'cars', baseUrl: 'https://hb.511la.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        MN: { mapType: 'cars', baseUrl: 'https://hb.511mn.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        NE: { mapType: 'cars', baseUrl: 'https://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
     };
     var _tabDiv = {};  // stores the user tab div so it can be restored after switching back from Events mode to Default mode
     var _reports = [];
@@ -64,6 +64,73 @@
         if (message && level <= _debugLevel) {
             console.log('DOT Reports: ' + message);
         }
+    }
+
+    function copyToClipboard(report) {
+        debugger;
+        // create hidden text element, if it doesn't already exist
+        var targetId = "_hiddenCopyText_";
+        //var isInput = elem.tagName === "INPUT" || elem.tagName === "TEXTAREA";
+        var origSelectionStart, origSelectionEnd;
+        var target;
+
+        // must use a temporary form element for the selection and copy
+        target = document.getElementById(targetId);
+        if (!target) {
+            target = document.createElement("textarea");
+            target.style.position = "absolute";
+            target.style.left = "-9999px";
+            target.style.top = "0";
+            target.id = targetId;
+            document.body.appendChild(target);
+        }
+        var startTime = new Date(report.beginTime.time);
+        var lastUpdateTime = new Date(report.updateTime.time);
+
+        var $content = $('<div>').html([report.eventDescription.descriptionHeader + '<br/><br/>',
+                                        report.eventDescription.descriptionFull + '<br/><br/>',
+                                        'Start Time: ' + startTime.toString('MMM d, y @ h:mm tt') + '<br/>',
+                                        'Updated:' + lastUpdateTime.toString('MMM d, y @ h:mm tt')].join(''));
+                                        $(target).val($content[0].innerText || $content[0].textContent);
+
+        // select the content
+        var currentFocus = document.activeElement;
+        target.focus();
+        target.setSelectionRange(0, target.value.length);
+
+        // copy the selection
+        var succeed;
+        try {
+            succeed = document.execCommand("copy");
+        } catch(e) {
+            succeed = false;
+        }
+        // restore original focus
+        if (currentFocus && typeof currentFocus.focus === "function") {
+            currentFocus.focus();
+        }
+
+        target.textContent = "";
+        return succeed;
+    }
+
+    function createSavableReport(reportIn) {
+        var attributesToCopy = ['agencyAttribution','archived','beginTime','editorIdentifier','eventDescription','headlinePhrase',
+                                'icon','id','location','priority','situationUpdateKey','starred','updateTime'];
+
+        var reportOut = {};
+        attributesToCopy.forEach(function(attr) {
+            reportOut[attr] = reportIn[attr];
+        });
+
+        return reportOut;
+    }
+    function copyToSavableReports(reportsIn) {
+        var reportsOut = {};
+        for (var id in reportsIn) {
+            reportsOut[id] = createSavableReport(reportsIn[id]);
+        }
+        return reportsOut;
     }
 
     function saveSettingsToStorage() {
@@ -82,7 +149,8 @@
                 hideRestrictionReports: $('#hideDotRestrictionReports').is(':checked'),
                 hideFutureReports: $('#hideDotFutureReports').is(':checked'),
                 hideCurrentReports: $('#hideDotCurrentReports').is(':checked'),
-                archivedReports:_settings.archivedReports
+                archivedReports:_settings.archivedReports,
+                starredReports:copyToSavableReports(_settings.starredReports)
             };
             localStorage.setItem(_settingsStoreName, JSON.stringify(settings));
             log('Settings saved', 1);
@@ -206,8 +274,10 @@
             if (report.archived) {
                 $('.btn-archive-dot-report').text("Un-Archive");
             }
-            $('.btn-archive-dot-report').click(function() {console.log('ok'); setArchiveReport(report,!report.archived, true); buildTable();});
+            $('.btn-archive-dot-report').click(function() {setArchiveReport(report,!report.archived, true); buildTable();});
             $('.btn-open-dot-report').click(function(evt) {evt.stopPropagation(); window.open($(this).data('dotReportUrl'),'_blank');});
+            $('.btn-zoom-dot-report').click(function(evt) {evt.stopPropagation(); W.map.moveTo(getReport($(this).data('dotReportid')).marker.lonlat); W.map.zoomTo(4);});
+            $('.btn-copy-dot-report').click(function(evt) {evt.stopPropagation(); copyToClipboard(getReport($(this).data('dotReportid')));});
             $('.reportPopover,.close-popover').click(function(evt) {evt.stopPropagation(); hideAllReportPopovers();});
             //$(".close-popover").click(function() {hideAllReportPopovers();});
             $div.data('report').dataRow.css('background-color','beige');
@@ -243,6 +313,24 @@
         }
     }
 
+    function setStarReport(report, star, updateUi) {
+        report.starred = star;
+        if (star) {
+            if (!_settings.starredReports) { _settings.starredReports = {}; }
+            _settings.starredReports[report.id] = report;
+            report.imageDiv.addClass('dot-starred-marker');
+        } else {
+            delete _settings.starredReports[report.id];
+            report.imageDiv.removeClass('dot-starred-marker');
+        }
+        if (updateUi) {
+            saveSettingsToStorage();
+            updateReportsVisibility();
+            hideAllReportPopovers();
+        }
+
+    }
+
     function archiveAllReports(unarchive) {
         _reports.forEach(function(report) {
             setArchiveReport(report, !unarchive, false);
@@ -255,8 +343,17 @@
     function addRow($table, report) {
         var $img = $('<img>', {src:report.imgUrl, class:'table-img'});
         var $row = $('<tr> class="clickable"', {id:'dot-row-'+report.id}).append(
+            $('<td class="centered">').append(
+                $('<span>', {class:'star ' + (report.starred ? 'star-filled':'star-empty'),title:'Star if you want notification when this report is removed by the DOT.\nFor instance, if a map change needs to be undone after a closure report is removed.'}).click(
+                    function (evt) {
+                        evt.stopPropagation();
+                        setStarReport(report,!report.starred,true);
+                        var $this = $(this);
+                        $this.removeClass(report.starred ? 'star-empty' : 'star-filled');
+                        $this.addClass(report.starred ? 'star-filled' : 'star-empty');
+                    }))).append(
             $('<td>',{class:'centered'}).append(
-                $('<input>',{type:'checkbox',title:'Archive',id:'archive-' + report.id, 'data-report-id':report.id}).prop('checked', report.archived).click(
+                $('<input>',{type:'checkbox',title:'Archive (will automatically un-archive if report is updated by DOT)',id:'archive-' + report.id, 'data-report-id':report.id}).prop('checked', report.archived).click(
                     function(evt){
                         evt.stopPropagation();
                         var id = $(this).data('reportId');
@@ -266,9 +363,9 @@
                 )
             ),
             $('<td>',{class:'clickable'}).append($img)).append(
-            $('<td class="centered">').text(report.priority)).append(
-            $('<td>').text(report.eventDescription.descriptionHeader)).append(
-            $('<td class="centered">').text(new Date(report.beginTime.time).toString('M/d/y h:mm tt'))
+            $('<td>',{class:'centered'}).text(report.priority)).append(
+            $('<td>',{class:(report.wasRemoved?'removed-report':'')}).text(report.eventDescription.descriptionHeader)).append(
+            $('<td>',{class:'centered'}).text(new Date(report.beginTime.time).toString('M/d/y h:mm tt'))
         )
         .click(function () {
             var $row = $(this);
@@ -324,14 +421,18 @@
         var $th = $('<thead>').appendTo($table);
         $th.append(
             $('<tr>').append(
+                $('<th>',{id:'dot-table-star-header',title:'Favorites'}),
                 $('<th>', {id:'dot-table-archive-header',class:'centered'}).append(
-                    $('<span>', {class:'fa fa-archive',style:'font-size:120%',title:'Sort by archived'}))).append(
-                $('<th>', {id:'dot-table-category-header',title:'Sort by report type'})).append(
+                    $('<span>', {class:'fa fa-archive',style:'font-size:120%',title:'Sort by archived'})
+                ),
+                $('<th>', {id:'dot-table-category-header',title:'Sort by report type'}),
                 $('<th>', {id:'dot-table-priority-header',title:'Sort by priority'}).append(
-                    $('<span>', {class:'fa fa-exclamation-circle',style:'font-size:120%'}))).append(
-                $('<th>',{id:'dot-table-desc-header',title:'Sort by description'}).text('Description')).append(
+                    $('<span>', {class:'fa fa-exclamation-circle',style:'font-size:120%'})
+                ),
+                $('<th>',{id:'dot-table-desc-header',title:'Sort by description'}).text('Description'),
                 $('<th>',{id:'dot-table-begins-header',title:'Sort by starting date'}).text('Starts')
-            ));
+            )
+        );
         _reports.sort(dynamicSortMultiple(_columnSortOrder));
         _reports.forEach(function(report) {
             addRow($table, report);
@@ -392,8 +493,8 @@
             var content = [
                 report.eventDescription.descriptionFull,
                 '<div style="margin-top:10px;"><b>Start Time:</b>&nbsp;&nbsp;' + startTime.toString('MMM d, y @ h:mm tt') + '</div>',
-                '<div><b>Updated:</b>&nbsp;&nbsp;' + lastUpdateTime.toString('MMM d, y @ h:mm tt') + '</div>',
-                '<div"><hr style="margin-bottom:5px;margin-top:5px;border-color:gainsboro"><div style="display:table;width:100%"><button type="button" class="btn btn-primary btn-open-dot-report" data-dot-report-url="' + dot.baseUrl + dot.reportUrl + report.id + '" style="float:left;">Open in DOT website</button><button type="button" style="float:right;" class="btn btn-primary btn-archive-dot-report" data-dot-report-id="' + report.id + '">Archive</button></div></div></div>'
+                '<div><b>Updated:</b>&nbsp;&nbsp;' + lastUpdateTime.toString('MMM d, y @ h:mm tt') + '&nbsp;&nbsp;(update #' + report.situationUpdateKey.updateNumber + ')</div>',
+                '<div"><hr style="margin-bottom:5px;margin-top:5px;border-color:gainsboro"><div style="display:table;width:100%"><button type="button" class="btn btn-primary btn-open-dot-report" data-dot-report-url="' + dot.baseUrl + dot.reportUrl + report.id + '" style="float:left;">Open in DOT website</button><button type="button" class="btn btn-primary btn-zoom-dot-report" data-dot-reportid="' + report.id + '" style="float:left;margin-left:6px;">Zoom</button><button type="button" class="btn btn-primary btn-copy-dot-report" data-dot-reportid="' + report.id + '" style="float:left;margin-left:6px;"><span class="fa fa-copy"></button><button type="button" style="float:right;" class="btn btn-primary btn-archive-dot-report" data-dot-report-id="' + report.id + '">Archive</button></div></div></div>'
             ].join('');
             var $imageDiv = $(marker.icon.imageDiv)
             .css('cursor', 'pointer')
@@ -421,6 +522,7 @@
     }
 
     function processReports(reports) {
+        var settingsUpdated = false;
         _reports = [];
         _mapLayer.clearMarkers();
         log('Adding reports to map...', 1);
@@ -434,10 +536,32 @@
                         report.archived = true;
                     }
                 }
-                addReportToMap(report);
                 _reports.push(report);
             }
         });
+
+        // Check saved starred reports.
+        for(var reportId in _settings.starredReports) {
+            var starredReport = _settings.starredReports[reportId];
+            var report = getReport(reportId);
+            if (report) {
+                report.starred = true;
+                if (report.situationUpdateKey.updateNumber !== starredReport.situationUpdateKey.updateNumber) {
+                    _settings.starredReports[report.id] = report;
+                    settingsUpdated = true;
+                }
+            } else {
+                // Report has been removed by DOT.
+                if (!starredReport.wasRemoved) {
+                    starredReport.archived = false;
+                    starredReport.wasRemoved = true;
+                    settingsUpdated = true;
+                }
+                _reports.push(starredReport);
+            }
+        }
+        _reports.forEach(function(report) { addReportToMap(report); });
+        if (settingsUpdated) { saveSettingsToStorage(); }
         buildTable();
     }
 
@@ -502,7 +626,7 @@
             uniqueName: "__stateDotReports",
         });
 
-        I18n.translations.en.layers.name.__stateDotReports = "State DOT Reports";
+        I18n.translations[I18n.locale].layers.name.__stateDotReports = "State DOT Reports";
         W.map.addLayer(_mapLayer);
         _mapLayer.setVisibility(_settings.layerVisible);
         _mapLayer.events.register('visibilitychanged',null,onLayerVisibilityChanged);
@@ -556,11 +680,9 @@
                             .append($('<option>', {value:'ID'}).text('Idaho'))
                             .append($('<option>', {value:'IN'}).text('Indiana'))
                             .append($('<option>', {value:'IA'}).text('Iowa'))
-                            .append($('<option>', {value:'KY'}).text('Kentucky'))
                             .append($('<option>', {value:'LA'}).text('Louisiana'))
                             .append($('<option>', {value:'MN'}).text('Minnesota'))
                             .append($('<option>', {value:'NE'}).text('Nebraska'))
-                            .append($('<option>', {value:'RI'}).text('Rhode Island'))
                             .val(_settings.state)
                         )
                     )
@@ -611,7 +733,7 @@
             )
         ).append(
             $('<div>', {class:'side-panel-section>', id:'dot-report-table'}).append(
-                $('<div>').append(                   
+                $('<div>').append(
                     $('<span>', {title:'Click to refresh DOT reports', class:'fa fa-refresh refreshIcon dot-refresh-reports dot-table-label', style:'cursor:pointer;'})
                 ).append(
                     $('<span>',{class:'dot-table-label dot-report-count count'})
@@ -648,6 +770,7 @@
 
     function showScriptInfoAlert() {
         /* Check version and alert on update */
+        console.log(_scriptVersion);
         if (_alertUpdate && _scriptVersion !== _settings.lastVersion) {
             alert(_scriptVersionChanges);
         }
@@ -660,7 +783,7 @@
         fetchReports(processReports);
 
         var classHtml =  [
-            '.dot-table th,td,tr {cursor:pointer;} ',
+            '.dot-table th,td,tr {cursor:default;} ',
             '.dot-table .centered {text-align:center;} ',
             '.dot-table th:hover,tr:hover {background-color:aliceblue; outline: -webkit-focus-ring-color auto 5px;} ',
             '.dot-table th:hover {color:blue; border-color:whitesmoke; } ',
@@ -673,9 +796,13 @@
             '.tooltip.bottom > .tooltip-arrow {border-bottom-color:white;} ',
             'a.close-popover {text-decoration:none;padding:0px 3px;border-width:1px;background-color:white;border-color:ghostwhite} a.close-popover:hover {padding:0px 4px;border-style:outset;border-width:1px;background-color:white;border-color:ghostwhite;} ',
             '#dot-refresh-popup {position:absolute;z-index:9999;top:80px;left:650px;background-color:rgb(120,176,191);e;font-size:120%;padding:3px 11px;box-shadow:6px 8px rgba(20,20,20,0.6);border-radius:5px;color:white;} ',
-            '.refreshIcon:hover {color:blue; text-shadow: 2px 2px #aaa;} .refreshIcon:active{ text-shadow: 0px 0px; }',
+            '.refreshIcon:hover {color:blue; text-shadow: 2px 2px #aaa;} .refreshIcon:active{ text-shadow: 0px 0px; } ',
             '.dot-archived-marker {opacity:0.5;} ',
-            '.dot-table-label {font-size:85%;} .dot-table-action:hover {color:blue;cursor:pointer} .dot-table-label.right {float:right} .dot-table-label.count {margin-left:4px;}'
+            '.dot-table-label {font-size:85%;} .dot-table-action:hover {color:blue;cursor:pointer} .dot-table-label.right {float:right} .dot-table-label.count {margin-left:4px;} ',
+            '.dot-table .star {cursor:pointer;width:18px;height:18px;margin-top:3px;} ',
+            '.dot-table .star-empty {content:url(' + _imagesPath + '/star-empty.png);} ',
+            '.dot-table .star-filled {content:url('+ _imagesPath + '/star-filled.png);} ',
+            '.dot-table .removed-report {text-decoration:line-through;color:#bbb} '
         ].join('');
         $('<style type="text/css">' + classHtml + '</style>').appendTo('head');
 
@@ -683,15 +810,13 @@
         W.map.events.register('moveend',null,function() {if (_previousZoom !== W.map.zoom) {hideAllReportPopovers();} _previousZoom=W.map.zoom;});
     }
 
-    var _previousZoom;
-
     function loadSettingsFromStorage() {
         var settings = $.parseJSON(localStorage.getItem(_settingsStoreName));
         if(!settings) {
             settings = {
                 lastVersion:null,
                 layerVisible:true,
-                state:'KY',
+                state:'ID',
                 hideArchivedReports:true,
                 archivedReports:{}
             };
@@ -700,6 +825,7 @@
             settings.state = settings.state ? settings.state : 'KY';
             if(typeof settings.hideArchivedReports === 'undefined') { settings.hideArchivedReports = true; }
             settings.archivedReports = settings.archivedReports ? settings.archivedReports : {};
+            settings.starredReports = settings.starredReports ? settings.starredReports : {};
         }
         _settings = settings;
     }
@@ -713,36 +839,19 @@
     }
 
     function bootstrap() {
-        var bGreasemonkeyServiceDefined = false;
-        try {
-            if ("object" === typeof Components.interfaces.gmIGreasemonkeyService){
-                bGreasemonkeyServiceDefined = true;
-            }
-        } catch (err) {
-            //Ignore.
-        }
-        if ( "undefined" === typeof unsafeWindow || ! bGreasemonkeyServiceDefined) {
-            unsafeWindow = (function () {
-                var dummyElem   = document.createElement('p');
-                dummyElem.setAttribute ('onclick', 'return window;');
-                return dummyElem.onclick ();
-            }) ();
-        }
-
-        var wz = unsafeWindow.W;
-        if (wz && wz.loginManager &&
-            wz.loginManager.events.register &&
-            wz.map && wz.loginManager.isLoggedIn()) {
-            log('Initializing...', 0);
+        if (W && W.loginManager &&
+            W.loginManager.events.register &&
+            W.map && W.loginManager.isLoggedIn()) {
+            log('Initializing...', 1);
             init();
         } else {
-            log('Bootstrap failed. Trying again...', 0);
-            unsafeWindow.setTimeout(function () {
+            log('Bootstrap failed. Trying again...', 1);
+            setTimeout(function () {
                 bootstrap();
             }, 1000);
         }
     }
 
-    log('Bootstrap...', 0);
+    log('Bootstrap...', 1);
     bootstrap();
 })();
