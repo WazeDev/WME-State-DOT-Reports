@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.2.1
+// @version      1.2.2
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -34,7 +34,7 @@
     'use strict';
 
     var _settingsStoreName = 'dot_report_settings';
-    var _alertUpdate = true;
+    var _alertUpdate = false;
     var _debugLevel = 0;
     var _scriptVersion = GM_info.script.version;
     var _scriptVersionChanges = [
