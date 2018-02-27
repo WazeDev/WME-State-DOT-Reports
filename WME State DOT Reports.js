@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports (beta)
 // @namespace    https://greasyfork.org/users/45389
-// @version      1.2.2
+// @version      2018.02.27.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -21,12 +21,11 @@
 // ==/UserScript==
 
 /* global $ */
-/* global OpenLayers */
+/* global OL */
 /* global GM_info */
 /* global W */
 /* global GM_xmlhttpRequest */
 /* global unsafeWindow */
-/* global Waze */
 /* global Components */
 /* global I18n */
 
@@ -453,8 +452,8 @@
     function addReportToMap(report){
         if(report.location && report.location.primaryPoint && report.icon) {
             var coord = report.location.primaryPoint;
-            var size = new OpenLayers.Size(report.icon.width,report.icon.height);
-            var offset = new OpenLayers.Pixel(-(size.w/2), -size.h);
+            var size = new OL.Size(report.icon.width,report.icon.height);
+            var offset = new OL.Pixel(-(size.w/2), -size.h);
             var startTime = new Date(report.beginTime.time);
             var lastUpdateTime = new Date(report.updateTime.time);
             var now = new Date(Date.now());
@@ -476,8 +475,8 @@
                 imgName = '/tg_future_' + futureValue + '_' + getUrgencyString(imgName) + '.gif';
             }
             report.imgUrl = _imagesPath + imgName;
-            var icon = new OpenLayers.Icon(report.imgUrl,size,null);
-            var marker = new OpenLayers.Marker(new OpenLayers.LonLat(coord.lon,coord.lat).transform("EPSG:4326", "EPSG:900913"),icon);
+            var icon = new OL.Icon(report.imgUrl,size,null);
+            var marker = new OL.Marker(new OL.LonLat(coord.lon,coord.lat).transform("EPSG:4326", "EPSG:900913"),icon);
 
             var popoverTemplate = ['<div class="reportPopover popover" style="max-width:500px;width:500px;">',
                                    '<div class="arrow"></div>',
@@ -579,7 +578,7 @@
     }
 
     function installIcon() {
-        OpenLayers.Icon = OpenLayers.Class({
+        OL.Icon = OL.Class({
             url: null,
             size: null,
             offset: null,
@@ -591,26 +590,26 @@
                 this.size=b||{w: 20,h: 20};
                 this.offset=c||{x: -(this.size.w/2),y: -(this.size.h/2)};
                 this.calculateOffset=d;
-                a=OpenLayers.Util.createUniqueID("OL_Icon_");
-                var div = this.imageDiv=OpenLayers.Util.createAlphaImageDiv(a);
+                a=OL.Util.createUniqueID("OL_Icon_");
+                var div = this.imageDiv=OL.Util.createAlphaImageDiv(a);
                 $(div.firstChild).removeClass('olAlphaImg');   // LEAVE THIS LINE TO PREVENT WME-HARDHATS SCRIPT FROM TURNING ALL ICONS INTO HARDHAT WAZERS --MAPOMATIC
             },
-            destroy: function(){ this.erase();OpenLayers.Event.stopObservingElement(this.imageDiv.firstChild);this.imageDiv.innerHTML="";this.imageDiv=null; },
-            clone: function(){ return new OpenLayers.Icon(this.url,this.size,this.offset,this.calculateOffset); },
+            destroy: function(){ this.erase();OL.Event.stopObservingElement(this.imageDiv.firstChild);this.imageDiv.innerHTML="";this.imageDiv=null; },
+            clone: function(){ return new OL.Icon(this.url,this.size,this.offset,this.calculateOffset); },
             setSize: function(a){ null!==a&&(this.size=a); this.draw(); },
             setUrl: function(a){ null!==a&&(this.url=a); this.draw(); },
             draw: function(a){
-                OpenLayers.Util.modifyAlphaImageDiv(this.imageDiv,null,null,this.size,this.url,"absolute");
+                OL.Util.modifyAlphaImageDiv(this.imageDiv,null,null,this.size,this.url,"absolute");
                 this.moveTo(a);
                 return this.imageDiv;
             },
-            erase: function(){ null!==this.imageDiv&&null!==this.imageDiv.parentNode&&OpenLayers.Element.remove(this.imageDiv); },
-            setOpacity: function(a){ OpenLayers.Util.modifyAlphaImageDiv(this.imageDiv,null,null,null,null,null,null,null,a); },
+            erase: function(){ null!==this.imageDiv&&null!==this.imageDiv.parentNode&&OL.Element.remove(this.imageDiv); },
+            setOpacity: function(a){ OL.Util.modifyAlphaImageDiv(this.imageDiv,null,null,null,null,null,null,null,a); },
             moveTo: function(a){
                 null!==a&&(this.px=a);
                 null!==this.imageDiv&&(null===this.px?this.display(!1): (
                     this.calculateOffset&&(this.offset=this.calculateOffset(this.size)),
-                    OpenLayers.Util.modifyAlphaImageDiv(this.imageDiv,null,{x: this.px.x+this.offset.x,y: this.px.y+this.offset.y})
+                    OL.Util.modifyAlphaImageDiv(this.imageDiv,null,{x: this.px.x+this.offset.x,y: this.px.y+this.offset.y})
                 ));
             },
             display: function(a){ this.imageDiv.style.display=a?"": "none"; },
@@ -621,7 +620,7 @@
 
     function init511ReportsOverlay(){
         installIcon();
-        _mapLayer = new OpenLayers.Layer.Markers("State DOT Reports", {
+        _mapLayer = new OL.Layer.Markers("State DOT Reports", {
             displayInLayerSwitcher: true,
             uniqueName: "__stateDotReports",
         });
@@ -834,7 +833,7 @@
         loadSettingsFromStorage();
         initGui();
         unsafeWindow.addEventListener('beforeunload', function saveOnClose() { saveSettingsToStorage(); }, false);
-        Waze.app.modeController.model.bind('change:mode', onModeChanged);
+        W.app.modeController.model.bind('change:mode', onModeChanged);
         log('Initialized.', 0);
     }
 
