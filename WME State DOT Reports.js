@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2018.02.27.001
+// @version      2018.07.21.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
+// @contributionURL https://github.com/WazeDev/Thank-The-Authors
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
 // @grant        GM_xmlhttpRequest
 // @connect      511.ky.gov
@@ -50,7 +51,7 @@
         IN: { mapType: 'cars', baseUrl: 'https://indot.carsprogram.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
         LA: { mapType: 'cars', baseUrl: 'https://hb.511la.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
         MN: { mapType: 'cars', baseUrl: 'https://hb.511mn.org', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
-        NE: { mapType: 'cars', baseUrl: 'https://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' },
+        NE: { mapType: 'cars', baseUrl: 'https://hb.511.nebraska.gov', reportUrl: '/#roadReports/eventAlbum/', reportsFeedUrl: '/tgevents/api/eventReports' }
     };
     var _tabDiv = {};  // stores the user tab div so it can be restored after switching back from Events mode to Default mode
     var _reports = [];
@@ -226,7 +227,7 @@
             var hide =
                 hideArchived && report.archived ||
                 hideWaze && img.indexOf('waze') > -1 ||
-                hideNormal && img.indexOf('driving-good') > -1 ||
+                hideNormal && (img.indexOf('in_good_driving') > -1 || img.indexOf('driving-good') > -1) ||
                 hideWeather && (img.indexOf('weather') > -1 || img.indexOf('flooding') > -1) ||
                 hideCrash && img.indexOf('crash') > -1 ||
                 hideWarning && (img.indexOf('warning') > -1 || img.indexOf('lane_closure') > -1) ||
@@ -458,7 +459,7 @@
             var lastUpdateTime = new Date(report.updateTime.time);
             var now = new Date(Date.now());
             var imgName = report.icon.image;
-            if (imgName.indexOf('flooding') != -1) {
+            if (imgName.indexOf('flooding') !== -1) {
                 imgName = imgName.replace('flooding','weather').replace('.png','.gif');
             } else if (report.headlinePhrase.category === 5 && report.headlinePhrase.code === 21) {
                 imgName = '/tg_flooding_urgent.png';
@@ -511,7 +512,7 @@
             .data('state', '');
 
             $imageDiv.data('report', report);
-            if (report.agencyAttribution && report.agencyAttribution.agencyName.toLowerCase().indexOf('waze') != -1) {
+            if (report.agencyAttribution && report.agencyAttribution.agencyName.toLowerCase().indexOf('waze') !== -1) {
                 $imageDiv.addClass('wazeReport');
             }
             if (report.archived) { $imageDiv.addClass('dot-archived-marker'); }
@@ -622,7 +623,7 @@
         installIcon();
         _mapLayer = new OL.Layer.Markers("State DOT Reports", {
             displayInLayerSwitcher: true,
-            uniqueName: "__stateDotReports",
+            uniqueName: "__stateDotReports"
         });
 
         I18n.translations[I18n.locale].layers.name.__stateDotReports = "State DOT Reports";
@@ -757,7 +758,7 @@
         );
 
         restoreUserTab();
-        $('<div>', {id: 'dot-refresh-popup',}).text('DOT Reports Refreshed').hide().appendTo($('div#editor-container'));
+        $('<div>', {id: 'dot-refresh-popup'}).text('DOT Reports Refreshed').hide().appendTo($('div#editor-container'));
 
         (function setChecks(settingProps, checkboxIds) {
             for (var i=0; i<settingProps.length; i++) {
