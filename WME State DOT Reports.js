@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2018.08.18.001
+// @version      2018.11.27.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -271,6 +271,7 @@
             $div.data('state', 'pinned');
             W.map.moveTo(report.marker.lonlat);
             $div.popover('show');
+            _mapLayer.setZIndex(100000); // this is to help make sure the report shows on top of the turn restriction arrow layer
             if (report.archived) {
                 $('.btn-archive-dot-report').text("Un-Archive");
             }
@@ -629,6 +630,7 @@
         I18n.translations[I18n.locale].layers.name.__stateDotReports = "State DOT Reports";
         W.map.addLayer(_mapLayer);
         _mapLayer.setVisibility(_settings.layerVisible);
+        _mapLayer.setZIndex(100000);
         _mapLayer.events.register('visibilitychanged',null,onLayerVisibilityChanged);
     }
 
