@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2018.11.27.001
+// @version      2020.03.11.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -269,7 +269,7 @@
             var id = $div.data('reportId');
             var report = getReport(id);
             $div.data('state', 'pinned');
-            W.map.moveTo(report.marker.lonlat);
+            W.map.setCenter(report.marker.lonlat);
             $div.popover('show');
             _mapLayer.setZIndex(100000); // this is to help make sure the report shows on top of the turn restriction arrow layer
             if (report.archived) {
@@ -277,7 +277,7 @@
             }
             $('.btn-archive-dot-report').click(function() {setArchiveReport(report,!report.archived, true); buildTable();});
             $('.btn-open-dot-report').click(function(evt) {evt.stopPropagation(); window.open($(this).data('dotReportUrl'),'_blank');});
-            $('.btn-zoom-dot-report').click(function(evt) {evt.stopPropagation(); W.map.moveTo(getReport($(this).data('dotReportid')).marker.lonlat); W.map.zoomTo(4);});
+            $('.btn-zoom-dot-report').click(function(evt) {evt.stopPropagation(); W.map.setCenter(getReport($(this).data('dotReportid')).marker.lonlat); W.map.zoomTo(4);});
             $('.btn-copy-dot-report').click(function(evt) {evt.stopPropagation(); copyToClipboard(getReport($(this).data('dotReportid')));});
             $('.reportPopover,.close-popover').click(function(evt) {evt.stopPropagation(); hideAllReportPopovers();});
             //$(".close-popover").click(function() {hideAllReportPopovers();});
@@ -374,7 +374,7 @@
             var marker = getReport(id).marker;
             var $imageDiv = report.imageDiv;
             //if (!marker.onScreen()) {
-            W.map.moveTo(marker.lonlat);
+            W.map.setCenter(marker.lonlat);
             //}
             toggleReportPopover($imageDiv);
 
