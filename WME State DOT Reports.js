@@ -7,7 +7,7 @@
 // @license      GNU GPLv3
 // @contributionURL https://github.com/WazeDev/Thank-The-Authors
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
-// @grant        GM_xmlhttpRequest
+// @require      https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @connect      511.ky.gov
 // @connect      indot.carsprogram.org
 // @connect      hb.511ia.org
@@ -25,8 +25,8 @@
 /* global OpenLayers */
 /* global GM_info */
 /* global W */
-/* global GM_xmlhttpRequest */
 /* global unsafeWindow */
+/* global WazeWrap */
 
 const SETTINGS_STORE_NAME = 'dot_report_settings';
 const ALERT_UPDATE = false;
@@ -37,37 +37,43 @@ const SCRIPT_VERSION_CHANGES = [
 ].join('');
 const IMAGES_PATH = 'https://raw.githubusercontent.com/mapomatic/ky511-images/master';
 const DOT_INFO = {
-    IA: {
-        mapType: 'cars',
-        baseUrl: 'https://hb.511ia.org',
-        reportUrl: '/#allReports/eventAlbum/',
-        reportsFeedUrl: '/tgevents/api/eventReports'
-    },
     ID: {
+        stateName: 'Idaho',
         mapType: 'cars',
         baseUrl: 'https://hb.511.idaho.gov',
         reportUrl: '/#roadReports/eventAlbum/',
         reportsFeedUrl: '/tgevents/api/eventReports'
     },
     IN: {
+        stateName: 'Indiana',
         mapType: 'cars',
         baseUrl: 'https://indot.carsprogram.org',
         reportUrl: '/#roadReports/eventAlbum/',
         reportsFeedUrl: '/tgevents/api/eventReports'
     },
+    IA: {
+        stateName: 'Iowa',
+        mapType: 'cars',
+        baseUrl: 'https://hb.511ia.org',
+        reportUrl: '/#allReports/eventAlbum/',
+        reportsFeedUrl: '/tgevents/api/eventReports'
+    },
     LA: {
+        stateName: 'Louisiana',
         mapType: 'cars',
         baseUrl: 'https://hb.511la.org',
         reportUrl: '/#roadReports/eventAlbum/',
         reportsFeedUrl: '/tgevents/api/eventReports'
     },
     MN: {
+        stateName: 'Minnesota',
         mapType: 'cars',
         baseUrl: 'https://hb.511mn.org',
         reportUrl: '/#roadReports/eventAlbum/',
         reportsFeedUrl: '/tgevents/api/eventReports'
     },
     NE: {
+        stateName: 'Nebraska',
         mapType: 'cars',
         baseUrl: 'https://hb.511.nebraska.gov',
         reportUrl: '/#roadReports/eventAlbum/',
@@ -651,13 +657,10 @@ function processReports(reports) {
     buildTable();
 }
 
-function fetchReports(callback) {
+async function fetchReports() {
     const dot = DOT_INFO[_settings.state];
-    GM_xmlhttpRequest({
-        method: 'GET',
-        url: dot.baseUrl + dot.reportsFeedUrl,
-        onload: res => { callback($.parseJSON(res.responseText)); }
-    });
+    const json = await $.getJSON(dot.baseUrl + dot.reportsFeedUrl);
+    processReports(json);
 }
 
 function onLayerVisibilityChanged() {
@@ -713,7 +716,7 @@ function onStateSelectChange(evt) {
     hideAllReportPopovers();
     _settings.state = evt.currentTarget.value;
     saveSettingsToStorage();
-    fetchReports(processReports);
+    fetchReports();
 }
 
 function onHideReportTypeCheckChange() {
@@ -721,13 +724,29 @@ function onHideReportTypeCheckChange() {
     updateReportsVisibility();
 }
 
-function onRefreshReportsClick(evt) {
+function isLoading() {
+    return $('#refresh-dot-reports-2').hasClass('fa-spin');
+}
+function beforeLoading() {
+    const spinner = $('#refresh-dot-reports-2');
+    spinner.addClass('fa-spin').css({ cursor: 'auto' });
     hideAllReportPopovers();
-    fetchReports(processReports);
+}
+function afterLoading() {
+    const spinner = $('#refresh-dot-reports-2');
+    spinner.removeClass('fa-spin').css({ cursor: 'pointer' });
     const $refreshPopup = $('#dot-refresh-popup');
     $refreshPopup.show();
     setTimeout(() => $refreshPopup.hide(), 1500);
+}
+
+async function onRefreshReportsClick(evt) {
     evt.stopPropagation();
+    if (!isLoading()) {
+        beforeLoading();
+        await fetchReports();
+        afterLoading();
+    }
 }
 
 function init511ReportsOverlay() {
@@ -762,6 +781,7 @@ function initUserPanel() {
     TAB_DIV.tab = $('<li>').append(
         $('<a>', { 'data-toggle': 'tab', href: '#sidepanel-statedot' }).text('DOT').append(
             $('<span>', {
+                id: 'refresh-dot-reports-1',
                 title: 'Click to refresh DOT reports',
                 class: 'fa fa-refresh refreshIcon nav-tab-icon dot-refresh-reports',
                 style: 'cursor:pointer;'
@@ -783,12 +803,7 @@ function initUserPanel() {
                 $('<div>', { class: 'controls', id: 'state-select' }).append(
                     $('<div>').append(
                         $('<select>', { id: 'stateDotStateSelect', class: 'form-control' }).append(
-                            createOption('ID', 'Idaho'),
-                            createOption('IN', 'Indiana'),
-                            createOption('IA', 'Iowa'),
-                            createOption('LA', 'Louisiana'),
-                            createOption('MN', 'Minnesota'),
-                            createOption('NE', 'Nebraska')
+                            Object.keys(DOT_INFO).map(abbr => createOption(abbr, DOT_INFO[abbr].stateName))
                         ).val(_settings.state)
                     )
                 ),
@@ -810,6 +825,7 @@ function initUserPanel() {
         $('<div>', { class: 'side-panel-section>', id: 'dot-report-table' }).append(
             $('<div>').append(
                 $('<span>', {
+                    id: 'refresh-dot-reports-2',
                     title: 'Click to refresh DOT reports',
                     class: 'fa fa-refresh refreshIcon dot-refresh-reports dot-table-label',
                     style: 'cursor:pointer;'
@@ -855,7 +871,7 @@ function initGui() {
     init511ReportsOverlay();
     initUserPanel();
     showScriptInfoAlert();
-    fetchReports(processReports);
+    fetchReports();
 
     $(`<style type="text/css">
 .dot-table th,td,tr {cursor:default;}
@@ -938,7 +954,8 @@ function init() {
 function bootstrap() {
     if (W && W.loginManager
         && W.loginManager.events.register
-        && W.map && W.loginManager.user) {
+        && W.map && W.loginManager.user
+        && WazeWrap.Ready) {
         log('Initializing...');
         init();
     } else {
