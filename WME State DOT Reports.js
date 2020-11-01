@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2020.10.24.001
+// @version      2020.11.01.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
 // @contributionURL https://github.com/WazeDev/Thank-The-Authors
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
 // @require      https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
+// @grant        GM_xmlhttpRequest
 // @connect      511.ky.gov
 // @connect      indot.carsprogram.org
 // @connect      hb.511ia.org
@@ -27,6 +28,7 @@
 /* global W */
 /* global unsafeWindow */
 /* global WazeWrap */
+/* global GM_xmlhttpRequest */
 
 const SETTINGS_STORE_NAME = 'dot_report_settings';
 const ALERT_UPDATE = false;
@@ -58,13 +60,6 @@ const DOT_INFO = {
         reportUrl: '/#allReports/eventAlbum/',
         reportsFeedUrl: '/tgevents/api/eventReports'
     },
-    LA: {
-        stateName: 'Louisiana',
-        mapType: 'cars',
-        baseUrl: 'https://hb.511la.org',
-        reportUrl: '/#roadReports/eventAlbum/',
-        reportsFeedUrl: '/tgevents/api/eventReports'
-    },
     MN: {
         stateName: 'Minnesota',
         mapType: 'cars',
@@ -93,6 +88,9 @@ function log(message) {
 
 function logDebug(message) {
     console.debug('DOT Reports:', message);
+}
+function logError(message) {
+    console.error('DOT Reports:', message);
 }
 
 function copyToClipboard(report) {
@@ -141,6 +139,12 @@ Updated: ${lastUpdateTime.toString('MMM d, y @ h:mm tt')}`
 
     target.textContent = '';
     return succeed;
+}
+
+// I believe this should return the bounds that Waze uses to load its data model.
+// It's wider than the visible bounds of the map, to reduce data loading frequency.
+function getExpandedDataBounds() {
+    return W.controller.descartesClient.getExpandedDataBounds(W.map.calculateBounds());
 }
 
 function createSavableReport(reportIn) {
@@ -256,7 +260,7 @@ function updateReportsVisibility() {
         const start = new Date(report.beginTime.time);
         const hide = (hideArchived && report.archived)
             || (hideWaze && img.indexOf('waze') > -1)
-            || (hideNormal && (img.indexOf('in_good_driving' > -1) || img.indexOf('driving-good') > -1))
+            || (hideNormal && img.includes('driving'))
             || (hideWeather && (img.indexOf('weather') > -1 || img.indexOf('flooding') > -1))
             || (hideCrash && img.indexOf('crash') > -1)
             || (hideWarning && (img.indexOf('warning') > -1 || img.indexOf('lane_closure') > -1))
@@ -290,13 +294,12 @@ function deselectAllDataRows() {
     _reports.forEach(rpt => rpt.dataRow.css('background-color', 'white'));
 }
 
-function toggleMarkerPopover($div) {
+function toggleMarkerPopover($div, forcePin = false) {
     hideAllPopovers($div);
-    if ($div.data('state') !== 'pinned') {
+    if ($div.data('state') !== 'pinned' || forcePin) {
         const id = $div.data('reportId');
         const report = getReport(id);
         $div.data('state', 'pinned');
-        W.map.setCenter(report.marker.lonlat);
         $div.popover('show');
         _mapLayer.setZIndex(100000); // this is to help make sure the report shows on top of the turn restriction arrow layer
         if (report.archived) {
@@ -392,8 +395,7 @@ function addRow($table, report) {
                 $target.removeClass(report.starred ? 'star-empty' : 'star-filled');
                 $target.addClass(report.starred ? 'star-filled' : 'star-empty');
             })
-        )
-    ).append(
+        ),
         $('<td>', { class: 'centered' }).append(
             $('<input>', {
                 type: 'checkbox',
@@ -408,28 +410,26 @@ function addRow($table, report) {
                 setArchiveReport(thisReport, $target.is(':checked'), true);
             })
         ),
-        $('<td>', { class: 'clickable' }).append($img)
-    ).append(
-        $('<td>', { class: 'centered' }).text(report.priority)
-    ).append(
-        $('<td>', { class: (report.wasRemoved ? 'removed-report' : '') }).text(report.eventDescription.descriptionHeader)
-    ).append(
+        $('<td>', { class: 'clickable' }).append($img),
+        $('<td>', { class: 'centered' }).text(report.priority),
+        $('<td>', { class: (report.wasRemoved ? 'removed-report' : '') }).text(report.eventDescription.descriptionHeader),
         $('<td>', { class: 'centered' }).text(new Date(report.beginTime.time).toString('M/d/y h:mm tt'))
     ).click(evt => {
         const $thisRow = $(evt.currentTarget);
         const id = $thisRow.data('reportId');
         const { marker } = getReport(id);
         const $imageDiv = report.imageDiv;
-        // if (!marker.onScreen()) {
-        W.map.setCenter(marker.lonlat);
-        // }
+
+        if ($imageDiv.data('state') !== 'pinned') {
+            W.map.setCenter(marker.lonlat);
+        }
+
         toggleReportPopover($imageDiv);
     }).data('reportId', report.id);
     report.dataRow = $row;
     $table.append($row);
     $row.report = report;
 }
-
 
 function onClickColumnHeader(evt) {
     const obj = evt.currentTarget;
@@ -497,45 +497,50 @@ function getUrgencyString(imagePath) {
     return imagePath.substring(i1 + 1, i2);
 }
 
-function addReportToMap(report) {
+function updateReportImageUrl(report) {
+    const startTime = new Date(report.beginTime.time);
+    let imgName = report.icon.image;
+
+    if (imgName.indexOf('flooding') !== -1) {
+        imgName = imgName.replace('flooding', 'weather').replace('.png', '.gif');
+    } else if (report.headlinePhrase.category === 5 && report.headlinePhrase.code === 21) {
+        imgName = '/tg_flooding_urgent.png';
+    }
+
+    const now = new Date(Date.now());
+    if (startTime > now) {
+        let futureValue;
+        if (startTime > now.clone().addMonths(2)) {
+            futureValue = 'pp';
+        } else if (startTime > now.clone().addMonths(1)) {
+            futureValue = 'p';
+        } else {
+            futureValue = startTime.getDate();
+        }
+        imgName = `/tg_future_${futureValue}_${getUrgencyString(imgName)}.gif`;
+    }
+    report.imgUrl = IMAGES_PATH + imgName;
+}
+
+function updateReportGeometry(report) {
+    const coord = report.location.primaryPoint;
+    report.location.openLayers = {
+        primaryPointLonLat: new OpenLayers.LonLat(coord.lon, coord.lat).transform('EPSG:4326', 'EPSG:900913')
+    };
+}
+
+function processReport(report) {
     if (report.location && report.location.primaryPoint && report.icon) {
-        const coord = report.location.primaryPoint;
         const size = new OpenLayers.Size(report.icon.width, report.icon.height);
-        const startTime = new Date(report.beginTime.time);
-        const lastUpdateTime = new Date(report.updateTime.time);
-        const now = new Date(Date.now());
-        let imgName = report.icon.image;
-        if (imgName.indexOf('flooding') !== -1) {
-            imgName = imgName.replace('flooding', 'weather').replace('.png', '.gif');
-        } else if (report.headlinePhrase.category === 5 && report.headlinePhrase.code === 21) {
-            imgName = '/tg_flooding_urgent.png';
-        }
-        if (startTime > now) {
-            let futureValue;
-            if (startTime > now.clone().addMonths(2)) {
-                futureValue = 'pp';
-            } else if (startTime > now.clone().addMonths(1)) {
-                futureValue = 'p';
-            } else {
-                futureValue = startTime.getDate();
-            }
-            imgName = `/tg_future_${futureValue}_${getUrgencyString(imgName)}.gif`;
-        }
-        report.imgUrl = IMAGES_PATH + imgName;
         const icon = new OpenLayers.Icon(report.imgUrl, size, null);
-        const marker = new OpenLayers.Marker(new OpenLayers.LonLat(coord.lon, coord.lat).transform('EPSG:4326', 'EPSG:900913'), icon);
-
-        const popoverTemplate = $('<div>', { class: 'reportPopover popover', style: 'max-width: 500px; width: 500px;' }).append(
-            $('<div>', { class: 'arrow' }),
-            $('<div>', { class: 'popover-title' }),
-            $('<div>', { class: 'popover-content' })
-        );
-
+        const marker = new OpenLayers.Marker(report.location.openLayers.primaryPointLonLat, icon);
         marker.report = report;
         // marker.events.register('click', marker, onMarkerClick);
-        _mapLayer.addMarker(marker);
+        // _mapLayer.addMarker(marker);
 
         const dot = DOT_INFO[_settings.state];
+        const lastUpdateTime = new Date(report.updateTime.time);
+        const startTime = new Date(report.beginTime.time);
         const content = $('<div>').append(
             report.eventDescription.descriptionFull,
             $('<div>', { style: 'margin-top: 10px;' }).append(
@@ -582,6 +587,12 @@ function addReportToMap(report) {
             $('<div>', { style: 'clear: both;' })
         ).html();
 
+        const popoverTemplate = $('<div>', { class: 'reportPopover popover', style: 'max-width: 500px; width: 500px;' }).append(
+            $('<div>', { class: 'arrow' }),
+            $('<div>', { class: 'popover-title' }),
+            $('<div>', { class: 'popover-content' })
+        );
+
         const $imageDiv = $(marker.icon.imageDiv)
             .css('cursor', 'pointer')
             .addClass('dotReport')
@@ -617,7 +628,9 @@ function processReports(reports) {
     _mapLayer.clearMarkers();
     logDebug('Adding reports to map...');
     reports.forEach(report => {
-        if (report.location && report.location.primaryPoint) {
+        // Exclude pandemic reports (e.g. required social distancing, masks, etc)
+        const isPandemicReport = report.icon.image.includes('pandemic');
+        if (!isPandemicReport && report.location && report.location.primaryPoint) {
             report.archived = false;
             if (_settings.archivedReports.hasOwnProperty(report.id)) {
                 if (_settings.archivedReports[report.id].updateNumber < report.situationUpdateKey.updateNumber) {
@@ -650,16 +663,55 @@ function processReports(reports) {
             _reports.push(starredReport);
         }
     });
-    _reports.forEach(report => addReportToMap(report));
+    _reports.forEach(report => {
+        updateReportImageUrl(report);
+        updateReportGeometry(report);
+        processReport(report);
+    });
     if (settingsUpdated) {
         saveSettingsToStorage();
     }
     buildTable();
 }
 
+// This function returns a Promise so that it can be used with async/await.
+function makeRequest(url) {
+    // GM_xmlhttpRequest is necessary to avoid CORS issues on some sites.
+    return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url,
+            onload: res => {
+                if (res.status >= 200 && res.status < 300) {
+                    resolve(res.responseText);
+                } else {
+                    reject(new Error(`(${this.status}) ${this.statusText}`));
+                }
+            },
+            onerror: res => {
+                let msg;
+                if (res.status === 0) {
+                    msg = 'An unknown error occurred while attempting to download DOT data.';
+                } else {
+                    msg = `Status code ${this.status} - ${this.statusText}`;
+                }
+                reject(new Error(msg));
+            }
+        });
+    });
+}
+
 async function fetchReports() {
     const dot = DOT_INFO[_settings.state];
-    const json = await $.getJSON(dot.baseUrl + dot.reportsFeedUrl);
+    let json;
+    try {
+        const url = dot.baseUrl + dot.reportsFeedUrl;
+        const text = await makeRequest(url);
+        json = $.parseJSON(text);
+    } catch (ex) {
+        logError(new Error(ex.message));
+        json = [];
+    }
     processReports(json);
 }
 
@@ -811,7 +863,7 @@ function initUserPanel() {
                 $('<div>', { id: 'dotSettingsCollapse', class: 'collapse' }).append(
                     createCheckbox('hideDotArchivedReports', 'Archived'),
                     createCheckbox('hideDotWazeReports', 'Waze (if supported by DOT)'),
-                    createCheckbox('hideDotNormalReports', 'Normal conditions'),
+                    createCheckbox('hideDotNormalReports', 'Driving conditions'),
                     createCheckbox('hideDotWeatherReports', 'Weather'),
                     createCheckbox('hideDotCrashReports', 'Crash'),
                     createCheckbox('hideDotWarningReports', 'Warning'),
@@ -907,13 +959,13 @@ function initGui() {
 .dot-table-label.right {float:right}
 .dot-table-label.count {margin-left:4px;}
 .dot-table .star {cursor:pointer;width:18px;height:18px;margin-top:3px;}
-.dot-table .star-empty {content:url(' + IMAGES_PATH + '/star-empty.png);}
-.dot-table .star-filled {content:url('+ IMAGES_PATH + '/star-filled.png);}
+.dot-table .star-empty {content:url(${IMAGES_PATH}/star-empty.png);}
+.dot-table .star-filled {content:url(${IMAGES_PATH}/star-filled.png);}
 .dot-table .removed-report {text-decoration:line-through;color:#bbb}
 </style>`).appendTo('head');
 
     _previousZoom = W.map.zoom;
-    W.map.events.register('moveend', null, () => {
+    W.map.events.register('zoomend', null, () => {
         if (_previousZoom !== W.map.zoom) {
             hideAllReportPopovers();
         }
@@ -943,9 +995,25 @@ function loadSettingsFromStorage() {
     _settings = settings;
 }
 
+function addMarkers() {
+    _mapLayer.clearMarkers();
+    const dataBounds = getExpandedDataBounds();
+    _reports.forEach(report => {
+        if (dataBounds.containsLonLat(report.location.openLayers.primaryPointLonLat)) {
+            _mapLayer.addMarker(report.marker);
+        }
+    });
+}
+
+function onMoveEnd() {
+    addMarkers();
+}
+
 function init() {
     loadSettingsFromStorage();
     initGui();
+    W.map.events.register('moveend', null, onMoveEnd);
+    addMarkers();
     unsafeWindow.addEventListener('beforeunload', saveSettingsToStorage, false);
     W.app.modeController.model.bind('change:mode', onModeChanged);
     log('Initialized');
