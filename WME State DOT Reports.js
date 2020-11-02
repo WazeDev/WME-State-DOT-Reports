@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2020.11.01.001
+// @version      2020.11.02.001
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -9,17 +9,12 @@
 // @include      /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
 // @require      https://greasyfork.org/scripts/24851-wazewrap/code/WazeWrap.js
 // @grant        GM_xmlhttpRequest
-// @connect      511.ky.gov
 // @connect      indot.carsprogram.org
 // @connect      hb.511ia.org
 // @connect      ohgo.com
 // @connect      hb.511.nebraska.gov
 // @connect      hb.511.idaho.gov
-// @connect      hb.511la.org
 // @connect      hb.511mn.org
-// @connect      511.dot.ri.gov
-// @connect      tims.ncdot.gov
-// @connect      apps.dot.state.nc.us
 // ==/UserScript==
 
 /* global $ */
@@ -37,7 +32,7 @@ const SCRIPT_VERSION_CHANGES = [
     `${GM_info.script.name}\nv${SCRIPT_VERSION}\n\nWhat's New\n------------------------------\n`,
     '\n- Added Copy To Clipboard button on report popups.'
 ].join('');
-const IMAGES_PATH = 'https://raw.githubusercontent.com/mapomatic/ky511-images/master';
+const IMAGES_PATH = 'https://raw.githubusercontent.com/WazeDev/WME-State-DOT-Reports/master/images';
 const DOT_INFO = {
     ID: {
         stateName: 'Idaho',
@@ -75,7 +70,6 @@ const DOT_INFO = {
         reportsFeedUrl: '/tgevents/api/eventReports'
     }
 };
-const TAB_DIV = {}; // stores the user tab div so it can be restored after switching back from Events mode to Default mode
 const _columnSortOrder = ['priority', 'beginTime.time', 'eventDescription.descriptionHeader', 'icon.image', 'archived'];
 let _reports = [];
 let _previousZoom;
@@ -96,7 +90,6 @@ function logError(message) {
 function copyToClipboard(report) {
     // create hidden text element, if it doesn't already exist
     const targetId = '_hiddenCopyText_';
-    // var isInput = elem.tagName === "INPUT" || elem.tagName === "TEXTAREA";
 
     // must use a temporary form element for the selection and copy
     let target = document.getElementById(targetId);
@@ -777,19 +770,17 @@ function onHideReportTypeCheckChange() {
 }
 
 function isLoading() {
-    return $('#refresh-dot-reports-2').hasClass('fa-spin');
+    return $('.dot-refresh-reports').hasClass('fa-spin');
 }
 function beforeLoading() {
-    const spinner = $('#refresh-dot-reports-2');
+    const spinner = $('.dot-refresh-reports');
     spinner.addClass('fa-spin').css({ cursor: 'auto' });
     hideAllReportPopovers();
 }
 function afterLoading() {
-    const spinner = $('#refresh-dot-reports-2');
+    const spinner = $('.dot-refresh-reports');
     spinner.removeClass('fa-spin').css({ cursor: 'pointer' });
-    const $refreshPopup = $('#dot-refresh-popup');
-    $refreshPopup.show();
-    setTimeout(() => $refreshPopup.hide(), 1500);
+    WazeWrap.Alerts.success(null, 'DOT reports refreshed');
 }
 
 async function onRefreshReportsClick(evt) {
@@ -814,33 +805,30 @@ function init511ReportsOverlay() {
     _mapLayer.events.register('visibilitychanged', null, onLayerVisibilityChanged);
 }
 
-function restoreUserTab() {
-    $('#user-tabs > .nav-tabs').append(TAB_DIV.tab);
-    $('#user-info > .flex-parent > .tab-content').append(TAB_DIV.panel);
+function initSideTab() {
     $('#stateDotStateSelect').change(onStateSelectChange);
     $('[id^=hideDot]').change(onHideReportTypeCheckChange);
+
+    ['ArchivedReports', 'WazeReports', 'NormalReports', 'WeatherReports',
+        'TrafficReports', 'CrashReports', 'WarningReports', 'RestrictionReports',
+        'ClosureReports', 'FutureReports', 'CurrentReports'].forEach(name => {
+        const settingsPropName = `hide${name}`;
+        const checkboxId = `hideDot${name}`;
+        if (_settings[settingsPropName]) {
+            $(`#${checkboxId}`).prop('checked', true);
+        }
+    });
+
+    $('<span>', {
+        title: 'Click to refresh DOT reports',
+        class: 'fa fa-refresh refreshIcon dot-tab-icon dot-refresh-reports',
+        style: 'cursor:pointer;'
+    }).appendTo($('a[href="#sidepanel-dot"]'));
+
     $('.dot-refresh-reports').click(onRefreshReportsClick);
 }
 
-function onModeChanged(model, modeId) {
-    hideAllReportPopovers();
-    if (!modeId || modeId === 1) {
-        restoreUserTab();
-    }
-}
-
-function initUserPanel() {
-    TAB_DIV.tab = $('<li>').append(
-        $('<a>', { 'data-toggle': 'tab', href: '#sidepanel-statedot' }).text('DOT').append(
-            $('<span>', {
-                id: 'refresh-dot-reports-1',
-                title: 'Click to refresh DOT reports',
-                class: 'fa fa-refresh refreshIcon nav-tab-icon dot-refresh-reports',
-                style: 'cursor:pointer;'
-            })
-        )
-    );
-
+function buildSideTab() {
     // Helper template functions to create elements
     const createCheckbox = (id, text) => $('<div>', { class: 'controls-container' }).append(
         $('<input>', { type: 'checkbox', id }),
@@ -848,7 +836,7 @@ function initUserPanel() {
     );
     const createOption = (value, text) => $('<option>', { value }).text(text);
 
-    TAB_DIV.panel = $('<div>', { class: 'tab-pane', id: 'sidepanel-statedot' }).append(
+    const panel = $('<div>').append(
         $('<div>', { class: 'side-panel-section>' }).append(
             $('<div>', { class: 'form-group' }).append(
                 $('<label>', { class: 'control-label' }).text('Select your state'),
@@ -877,7 +865,6 @@ function initUserPanel() {
         $('<div>', { class: 'side-panel-section>', id: 'dot-report-table' }).append(
             $('<div>').append(
                 $('<span>', {
-                    id: 'refresh-dot-reports-2',
                     title: 'Click to refresh DOT reports',
                     class: 'fa fa-refresh refreshIcon dot-refresh-reports dot-table-label',
                     style: 'cursor:pointer;'
@@ -898,18 +885,7 @@ function initUserPanel() {
         )
     );
 
-    restoreUserTab();
-    $('<div>', { id: 'dot-refresh-popup' }).text('DOT Reports Refreshed').hide().appendTo($('div#editor-container'));
-
-    ['ArchivedReports', 'WazeReports', 'NormalReports', 'WeatherReports',
-        'TrafficReports', 'CrashReports', 'WarningReports', 'RestrictionReports',
-        'ClosureReports', 'FutureReports', 'CurrentReports'].forEach(name => {
-        const settingsPropName = `hide${name}`;
-        const checkboxId = `hideDot${name}`;
-        if (_settings[settingsPropName]) {
-            $(`#${checkboxId}`).prop('checked', true);
-        }
-    });
+    new WazeWrap.Interface.Tab('DOT', panel.html(), initSideTab, null);
 }
 
 function showScriptInfoAlert() {
@@ -921,47 +897,36 @@ function showScriptInfoAlert() {
 
 function initGui() {
     init511ReportsOverlay();
-    initUserPanel();
+    buildSideTab();
     showScriptInfoAlert();
     fetchReports();
 
     $(`<style type="text/css">
-.dot-table th,td,tr {cursor:default;}
+.dot-table th,td,tr {cursor: default;}
 .dot-table .centered {text-align:center;}
-.dot-table th:hover,tr:hover {background-color:aliceblue; outline: -webkit-focus-ring-color auto 5px;}
-.dot-table th:hover {color:blue; border-color:whitesmoke; }
-.dot-table {border:1px solid gray; border-collapse:collapse; width:100%; font-size:83%;margin:0px 0px 0px 0px}
-.dot-table th,td {border:1px solid gainsboro;}
-.dot-table td,th {color:black; padding:1px 4px;}
-.dot-table th {background-color:gainsboro;}
-.dot-table .table-img {max-width:24px; max-height:24px;}
-.tooltip.top > .tooltip-arrow {border-top-color:white;}
-.tooltip.bottom > .tooltip-arrow {border-bottom-color:white;}
-.close-popover { cursor: pointer; font-size: 20px; }
+.dot-table th:hover,tr:hover {background-color: aliceblue;outline: -webkit-focus-ring-color auto 5px;}
+.dot-table th:hover {color: blue;border-color: whitesmoke; }
+.dot-table {border: 1px solid gray;border-collapse: collapse;width: 100%;font-size: 83%;margin: 0px 0px 0px 0px}
+.dot-table th,td {border: 1px solid gainsboro;}
+.dot-table td,th {color: black;padding: 1px 4px;}
+.dot-table th {background-color: gainsboro;}
+.dot-table .table-img {max-width: 24px;max-height: 24px;}
+.tooltip.top > .tooltip-arrow {border-top-color: white;}
+.tooltip.bottom > .tooltip-arrow {border-bottom-color: white;}
+.close-popover { cursor: pointer;font-size: 20px; }
 .close-popover:hover { color: #f35252; }
-#dot-refresh-popup {
-    position: absolute;
-    z-index: 9999;
-    top: 80px;
-    left: 650px;
-    background-color: rgb(120,176,191);
-    font-size: 120%;
-    padding: 3px 11px;
-    box-shadow: 6px 8px rgba(20,20,20,0.6);
-    border-radius: 5px;
-    color: white;
-}
-.refreshIcon:hover {color:blue; text-shadow: 2px 2px #aaa;}
+.refreshIcon:hover {color:blue;text-shadow: 2px 2px #aaa;}
 .refreshIcon:active { text-shadow: 0px 0px; }
-.dot-archived-marker {opacity:0.5;}
-.dot-table-label {font-size:85%;}
-.dot-table-action:hover {color:blue;cursor:pointer}
-.dot-table-label.right {float:right}
-.dot-table-label.count {margin-left:4px;}
-.dot-table .star {cursor:pointer;width:18px;height:18px;margin-top:3px;}
-.dot-table .star-empty {content:url(${IMAGES_PATH}/star-empty.png);}
-.dot-table .star-filled {content:url(${IMAGES_PATH}/star-filled.png);}
-.dot-table .removed-report {text-decoration:line-through;color:#bbb}
+.dot-tab-icon { margin-left: 10px; }
+.dot-archived-marker {opacity: 0.5;}
+.dot-table-label {font-size: 85%;}
+.dot-table-action:hover {color: blue;cursor: pointer}
+.dot-table-label.right {float: right}
+.dot-table-label.count {margin-left: 4px;}
+.dot-table .star {cursor: pointer;width: 18px;height: 18px;margin-top: 3px;}
+.dot-table .star-empty {content: url(${IMAGES_PATH}/star-empty.png);}
+.dot-table .star-filled {content: url(${IMAGES_PATH}/star-filled.png);}
+.dot-table .removed-report {text-decoration: line-through;color: #bbb}
 </style>`).appendTo('head');
 
     _previousZoom = W.map.zoom;
@@ -1015,7 +980,7 @@ function init() {
     W.map.events.register('moveend', null, onMoveEnd);
     addMarkers();
     unsafeWindow.addEventListener('beforeunload', saveSettingsToStorage, false);
-    W.app.modeController.model.bind('change:mode', onModeChanged);
+    // W.app.modeController.model.bind('change:mode', onModeChanged);
     log('Initialized');
 }
 
