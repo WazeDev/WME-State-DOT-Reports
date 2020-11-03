@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME State DOT Reports
 // @namespace    https://greasyfork.org/users/45389
-// @version      2020.11.02.001
+// @version      2020.11.02.002
 // @description  Display state transportation department reports in WME.
 // @author       MapOMatic
 // @license      GNU GPLv3
@@ -808,6 +808,7 @@ function init511ReportsOverlay() {
 function initSideTab() {
     $('#stateDotStateSelect').change(onStateSelectChange);
     $('[id^=hideDot]').change(onHideReportTypeCheckChange);
+    $('#stateDotStateSelect').val(_settings.state);
 
     ['ArchivedReports', 'WazeReports', 'NormalReports', 'WeatherReports',
         'TrafficReports', 'CrashReports', 'WarningReports', 'RestrictionReports',
@@ -844,7 +845,7 @@ function buildSideTab() {
                     $('<div>').append(
                         $('<select>', { id: 'stateDotStateSelect', class: 'form-control' }).append(
                             Object.keys(DOT_INFO).map(abbr => createOption(abbr, DOT_INFO[abbr].stateName))
-                        ).val(_settings.state)
+                        )
                     )
                 ),
                 $('<label style="width:100%; cursor:pointer; border-bottom: 1px solid #e0e0e0; margin-top:9px;" data-toggle="collapse" data-target="#dotSettingsCollapse"><span class="fa fa-caret-down" style="margin-right:5px;font-size:120%;"></span>Hide reports...</label>'),
@@ -899,7 +900,6 @@ function initGui() {
     init511ReportsOverlay();
     buildSideTab();
     showScriptInfoAlert();
-    fetchReports();
 
     $(`<style type="text/css">
 .dot-table th,td,tr {cursor: default;}
@@ -974,13 +974,13 @@ function onMoveEnd() {
     addMarkers();
 }
 
-function init() {
+async function init() {
     loadSettingsFromStorage();
-    initGui();
     W.map.events.register('moveend', null, onMoveEnd);
-    addMarkers();
     unsafeWindow.addEventListener('beforeunload', saveSettingsToStorage, false);
-    // W.app.modeController.model.bind('change:mode', onModeChanged);
+    initGui();
+    await fetchReports();
+    addMarkers();
     log('Initialized');
 }
 
